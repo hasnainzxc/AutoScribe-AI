@@ -1,0 +1,17 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="content_pipeline",
+    version="0.1.0",
+    packages=find_packages(),
+    install_requires=[
+        "praw",  # for Reddit API
+        "python-dotenv",  # for loading environment variables
+        "gTTS",  # Google Text-to-Speech
+        "moviepy",  # for video creation
+        "numpy",  # required for moviepy
+        "Pillow",  # for image processing
+        "openai",  # For API compatibility with OpenRouter
+        "requests",  # For HTTP requests
+    ],
+)
