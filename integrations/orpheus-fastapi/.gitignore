@@ -1,0 +1,17 @@
+.env
+__pycache__/
+.venv/
+venv/
+models/
+outputs/
+.cache/
+.history/
+.vscode/
+*.gguf
+*.pt
+*.bin
+*.ckpt
+*.safetensors
+*.tar
+*.tar.gz
+*.zip

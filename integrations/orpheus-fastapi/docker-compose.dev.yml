@@ -1,0 +1,26 @@
+services:
+  orpheus-fastapi:
+    user: ${UID:-1000}:${GID:-1000}
+    environment:
+      ORPHEUS_API_URL: http://llama-cpp-server:5006/v1/completions
+      HOME: /app
+      HF_HOME: /app/.cache
+      HUGGINGFACE_HUB_CACHE: /app/.cache/huggingface
+      TRANSFORMERS_CACHE: /app/.cache/transformers
+      # HSA_OVERRIDE_GFX_VERSION: "10.3.0"
+    command: [
+      "uvicorn", "app:app",
+      "--host", "0.0.0.0",
+      "--port", "5005",
+      "--workers", "1",
+      "--reload",
+      "--log-level", "debug"
+    ]
+    volumes:
+      - ./:/app
+      - venv:/app/venv
+      - ./outputs:/app/outputs
+      - ./.cache:/app/.cache
+
+volumes:
+  venv:
