@@ -1,6 +1,6 @@
-# AutoScribe-AI + Orpheus TTS
+# AutoScribe-AI (Audio‑Only)
 
-AI content automation pipeline with integrated high‑performance Text‑to‑Speech. Generate character‑styled dialogues from social content and render them into short videos. Ship TTS via an OpenAI‑compatible FastAPI server with multilingual voices and emotion tags.
+Generate Rick & Morty‑style (and DJ Cara‑style) dialogues from Reddit posts and render each line to audio files. Chatterbox (port 8014) is the supported TTS server; the pipeline falls back to Google gTTS when not configured.
 
 ---
 
@@ -8,49 +8,33 @@ AI content automation pipeline with integrated high‑performance Text‑to‑Sp
 
 * Dialogue generation via OpenRouter/OpenAI
 * Rick & Morty‑style prompt templates
-* Google TTS or Orpheus TTS backend
-* MoviePy video assembly
+* Google gTTS (default) or OpenAI‑compatible TTS backend
 * Reddit ingestion with sort and time filters
-* OpenAI‑compatible `/v1/audio/speech` endpoint (Orpheus)
-* 24+ voices, 8 languages, emotion tags (Orpheus)
-* Docker and native install paths
+* Chatterbox TTS support (port 8014)
 
 ---
 
-## Monorepo Structure
+## Project Structure
 
 ```
 AutoScribe-AI/
-├── content_generation/        # Audio/video creation
-│   ├── audio_gen.py           # gTTS or Orpheus backend
-│   └── video_gen.py           # MoviePy assembly
+├── content_generation/        # Audio creation
+│   └── audio_gen.py           # gTTS or server‑based TTS
 ├── ingestion/
 │   └── reddit_ingest.py       # Reddit API (PRAW)
 ├── story_generation/
 │   ├── dialogue_template.py
 │   ├── llm_dialogue.py
 │   └── story_generator.py
-├── Orpheus-FastAPI/           # TTS server (subfolder or submodule)
-│   ├── app.py                 # FastAPI web + API
-│   ├── tts_engine/
-│   │   ├── inference.py
-│   │   └── speechpipe.py
-│   ├── templates/             # web UI
-│   ├── static/
-│   └── outputs/               # generated audio
-├── create_video.py            # End‑to‑end pipeline
-├── run_story_gen.py           # Story generation runner
+├── run_story_gen.py           # End‑to‑end audio pipeline
 ├── requirements.txt
 ├── README.md                  # This file
 └── .env                       # API credentials (not committed)
 ```
 
-> **Note**
-> If `Orpheus-FastAPI` is a **git submodule**, run after cloning:
->
-> ```bash
-> git submodule update --init --recursive
-> ```
+> Note: This repo focuses on audio generation. For high‑quality voices, run a
+> Chatterbox TTS server locally on port 8014 and set the environment variables
+> from `.env.example`. Google gTTS remains as a safe fallback.
 
 ---
 
@@ -60,7 +44,10 @@ AutoScribe-AI/
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate 
+
+source /home/hairzee/.venvs/autoscribe-ai/bin/activate
+  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -77,112 +64,61 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 ### 3) Run full pipeline
 
 ```bash
-python create_video.py beermoney -n 2 -s top -t week
+# Default (Rick & Morty)
+python run_story_gen.py beermoney -n 2 -s top -t week -o output
+
+# DJ Cara (single-track) using default Caralong voice
+# (Set CHATTERBOX_BASE_URL=http://localhost:8014 first.)
+python run_story_gen.py beermoney -c djcara -s top -t week -o audio
+
+# DJ Cara with an explicit voice (exact filename from /get_predefined_voices)
+python run_story_gen.py beermoney -c djcara -s top -t week -o audio --tts-voice "DJ_Caralong.mp3"
+
+# List available voices from Chatterbox
+python run_story_gen.py --list-voices
+
+# Shortcut: Explicitly use Dj Caralong voice
+python run_story_gen.py beermoney -c djcara -s top -t week -o audio --cara
+
+# Optional: pass TTS tuning parameters
+# (temperature, exaggeration, cfg guidance, speed)
+python run_story_gen.py beermoney -c djcara -s top -t week -o audio \
+  --tts-temp 0.6 --tts-exag 0.9 --tts-cfg 0.3 --tts-speed 1.0
+
 ```
 
 Outputs:
 
-* `output/dialogues.json`
-* `output/dialogue_X/`
-* `output/final_video.mp4`
+* `output/dialogues.json` — saved text + metadata
+* `output/*.mp3` — combined audio files (per character or single‑track)
 
 ---
 
 ## TTS Backends
 
-### A) Google TTS (default in examples)
+### Chatterbox TTS (port 8014)
+
+Run a local Chatterbox TTS server on port 8014. Minimal env:
+
+```
+CHATTERBOX_BASE_URL=http://localhost:8014
+CHATTERBOX_API_KEY=your_tts_server_key
+TTS_MODEL=gpt-4o-mini-tts
+TTS_DEFAULT_VOICE=alloy
+TTS_DJCARA_VOICE=DJ_Caralong.mp3
+TTS_RESPONSE_FORMAT=mp3
+```
+
+Tips
+- List available voices: GET `http://localhost:8014/get_predefined_voices` (returns `display_name` and `filename`).
+- Outputs listing: GET `http://localhost:8014/api/outputs?limit=100` (optionally `&prefix=` to filter by filename prefix).
+- The pipeline’s Chatterbox client logs each request (endpoints, voice, text length) and downloads the newest output to your chosen `-o/--output` directory.
+
+The pipeline automatically falls back to Google gTTS if a server isn’t configured or fails at runtime.
+
+### Google TTS (default in examples)
 
 Works out of the box via `gTTS` in `content_generation/audio_gen.py`.
-
-### B) Orpheus TTS (FastAPI server)
-
-![Orpheus-FASTAPI Banner](https://lex-au.github.io/Orpheus-FastAPI/Banner.png)
-
-High‑performance TTS with OpenAI‑compatible API, multilingual voices, and emotion tags.
-
-#### Orpheus Features
-
-* OpenAI‑compatible `/v1/audio/speech`
-* Modern web UI
-* RTX‑optimized; CPU and ROCm paths supported
-* 24 voices across EN/FR/DE/KO/HI/ZH/ES/IT
-* Emotion tags: `<laugh>`, `<sigh>`, `<chuckle>`, etc.
-
-#### Orpheus Project Structure (subset)
-
-```
-Orpheus-FastAPI/
-├── app.py                # FastAPI server and endpoints
-├── docker-compose*.yml   # Compose variants (GPU, ROCm, CPU)
-├── Dockerfile.*          # Docker images
-├── requirements.txt
-├── templates/tts.html    # Web UI
-└── tts_engine/
-    ├── inference.py
-    └── speechpipe.py
-```
-
-#### Orpheus: Run via Docker Compose
-
-```bash
-# create .env from example
-cp .env.example .env
-
-# (optional) switch to a language‑specific model in .env
-# ORPHEUS_MODEL_NAME=Orpheus-3b-French-FT-Q8_0.gguf
-
-# pick one
-docker compose -f docker-compose-gpu.yml up         # CUDA
-docker compose -f docker-compose-gpu-rocm.yml up    # ROCm
-docker compose -f docker-compose-cpu.yml up         # CPU only
-```
-
-Web UI: `http://localhost:5005/`  •  API Docs: `http://localhost:5005/docs`
-
-#### Orpheus: Native Install
-
-```bash
-cd Orpheus-FastAPI
-python -m venv venv && source venv/bin/activate   # Win: venv\Scripts\activate
-pip install -r requirements.txt
-# choose one torch index per your GPU stack
-# CUDA 12.4
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-# or ROCm nightly
-# pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/rocm6.4/
-
-mkdir -p outputs static
-python app.py   # or: uvicorn app:app --host 0.0.0.0 --port 5005 --reload
-```
-
-#### Orpheus: OpenAI‑compatible API example
-
-```bash
-curl http://localhost:5005/v1/audio/speech \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "orpheus",
-    "input": "Hello world!",
-    "voice": "tara",
-    "response_format": "wav",
-    "speed": 1.0
-  }' \
-  --output speech.wav
-```
-
-#### Voices (examples)
-
-EN: tara, leah, jess, leo, dan, mia, zac, zoe
-FR: pierre, amelie, marie
-DE: jana, thomas, max
-KO: 유나, 준서
-HI: ऋतिका
-ZH: 长乐, 白芷
-ES: javi, sergio, maria
-IT: pietro, giulia, carlo
-
-> **Integration tip**
-> Point `audio_gen.py` to call Orpheus instead of gTTS by toggling a config flag or env var. Keep Google TTS as fallback.
 
 ---
 
@@ -206,36 +142,13 @@ python story_generation/story_generator.py
 python content_generation/audio_gen.py
 ```
 
-### Video
-
-```bash
-python content_generation/video_gen.py
-```
-
-### Full pipeline (debug)
-
-```bash
-python create_video.py beermoney -n 1 -s top -t week --debug
-```
+<!-- Video creation code was removed in the audio‑only refactor. -->
 
 ---
 
 ## Configuration
 
-* `.env` (root) for Reddit/OpenRouter keys.
-* `.env` in `Orpheus-FastAPI` for model/server settings. Example vars:
-
-```
-ORPHEUS_API_URL=http://llama-cpp-server:5006/v1/completions
-ORPHEUS_API_TIMEOUT=120
-ORPHEUS_MAX_TOKENS=8192
-ORPHEUS_TEMPERATURE=0.6
-ORPHEUS_TOP_P=0.9
-ORPHEUS_SAMPLE_RATE=24000
-ORPHEUS_PORT=5005
-ORPHEUS_HOST=0.0.0.0
-ORPHEUS_MODEL_NAME=Orpheus-3b-FT-Q8_0.gguf
-```
+* `.env` (root) for Reddit/OpenRouter keys and Chatterbox settings.
 
 ---
 

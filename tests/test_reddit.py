@@ -1,5 +1,13 @@
 """Test script for Reddit post fetching."""
 
+# Allow running this file directly with `python tests/test_reddit.py`
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from ingestion.reddit_ingest import fetch_subreddit_posts
 
 def test_reddit_fetching():

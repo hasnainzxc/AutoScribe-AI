@@ -1,17 +1,20 @@
 
 from __future__ import annotations
 
-from typing import List, Dict
+from typing import List, Dict, Tuple, Any
 
 from ingestion.reddit_ingest import fetch_subreddit_posts
-from story_generation.dialogue_template import (
-    generate_dialogue_from_post,
-)
+from story_generation.dialogue_template import generate_dialogue_from_post
+from story_generation.character_registry import get_character
 
 
 def create_stories(
-    subreddit: str = "beermoney", number_of_posts: int = 5, sort: str = "top", time_filter: str = "day"
-) -> List[List[str]]:
+    subreddit: str = "beermoney",
+    number_of_posts: int = 5,
+    sort: str = "top",
+    time_filter: str = "day",
+    character: str = "rickmorty",
+) -> List[Dict[str, Any]]:
     """Generate dialogues for a set of posts from a subreddit.
 
     Args:
@@ -21,7 +24,12 @@ def create_stories(
         time_filter (str): Time filter if sorting by 'top'. Defaults to 'day'.
 
     Returns:
-        List[List[str]]: A list of dialogues, each a list of strings.
+        List[Dict]: For each post, returns a dict with:
+            - 'character': str
+            - 'lines': List[str] (for multi‑speaker characters) OR
+            - 'text': str (for single‑speaker characters)
+            - 'metadata': Dict
+            - 'post': original post dict
     """
     print(f"\n[Story Generator] Starting to fetch {number_of_posts} posts from r/{subreddit}...")
     posts = fetch_subreddit_posts(
@@ -30,11 +38,32 @@ def create_stories(
         sort=sort,
         time_filter=time_filter,
     )
-    dialogues: List[List[str]] = []
+    outputs: List[Dict[str, Any]] = []
+    spec = get_character(character)
     for post in posts:
-        dialogue = generate_dialogue_from_post(post)
-        dialogues.append(dialogue)
-    return dialogues
+        if spec and spec.single_speaker:
+            # Single‑speaker monologue generation (e.g., DJ Cara)
+            text, meta = spec.generator(post)
+            outputs.append({
+                "character": spec.key,
+                "text": text,
+                "metadata": meta,
+                "post": post,
+            })
+        else:
+            # Multi‑speaker (e.g., Rick & Morty) returns lines
+            result = generate_dialogue_from_post(post, character=character)
+            if isinstance(result, tuple) and len(result) == 2:
+                lines, meta = result
+            else:
+                lines, meta = result, {}
+            outputs.append({
+                "character": character,
+                "lines": lines,
+                "metadata": meta,
+                "post": post,
+            })
+    return outputs
 
 
 if __name__ == "__main__":  # pragma: no cover - manual invocation
@@ -71,6 +100,13 @@ if __name__ == "__main__":  # pragma: no cover - manual invocation
             "Ignored for other sort methods."
         ),
     )
+    parser.add_argument(
+        "-c",
+        "--character",
+        choices=["rickmorty", "djcara"],
+        default="rickmorty",
+        help="Choose character style for generation",
+    )
 
     args = parser.parse_args()
     dialogues = create_stories(
@@ -78,5 +114,6 @@ if __name__ == "__main__":  # pragma: no cover - manual invocation
         number_of_posts=args.number_of_posts,
         sort=args.sort,
         time_filter=args.time_filter,
+        character=args.character,
     )
     print(json.dumps(dialogues, indent=2))

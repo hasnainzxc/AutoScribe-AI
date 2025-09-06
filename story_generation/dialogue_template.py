@@ -58,7 +58,9 @@ def summarise_text(body: str, max_sentences: int = 2) -> str:
 
 from .llm_dialogue import create_dynamic_dialogue
 
-def generate_dialogue_from_post(post: Dict[str, str], use_llm: bool = True) -> List[str]:
+def generate_dialogue_from_post(
+    post: Dict[str, str], use_llm: True | bool = True, character: str = "rickmorty"
+) -> List[str]:
     """Generate a Rick and Morty style dialogue for a Reddit post.
 
     Uses LLM-powered dialogue generation if available, falls back to template-based
@@ -74,7 +76,7 @@ def generate_dialogue_from_post(post: Dict[str, str], use_llm: bool = True) -> L
     """
     if use_llm:
         try:
-            # Try LLM-powered dynamic dialogue generation
+            # Only Rick & Morty in multi‑speaker path; DJ Cara handled separately
             return create_dynamic_dialogue(post)
         except Exception:
             # Fall back to template-based generation if LLM fails
