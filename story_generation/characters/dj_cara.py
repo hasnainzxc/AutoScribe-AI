@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple
 
 from config.settings import load_env
 from .base import CharacterSpec
+from .dj_cara_lines import build_demo_text
 
 try:
     from openai import OpenAI  # type: ignore
@@ -14,7 +15,7 @@ except Exception:
     OPENAI_AVAILABLE = False
 
 
-def generate(post: Dict[str, str]) -> Tuple[str, Dict]:
+def generate(post: Dict[str, str], *, mode: str = "reddit") -> Tuple[str, Dict]:
     """Generate a single‑speaker DJ Cara monologue (no line prefixes).
 
     Returns (text, metadata). Text is a continuous monologue suitable for
@@ -34,15 +35,26 @@ def generate(post: Dict[str, str]) -> Tuple[str, Dict]:
     title = (post.get("title") or "").strip()
     body = (post.get("selftext") or "").strip()
 
+    # Optional tone hint based on subreddit/topic
+    subreddit = (post.get("subreddit") or "").lower()
+    tone_hint = ""
+    if any(k in subreddit for k in ("jokes", "funny", "humor", "comedy")):
+        tone_hint = (
+            "Lean playful and witty. Include light one‑liners and cheeky asides. "
+            "Keep it clean and radio‑friendly.\n"
+        )
+
     style_preamble = (
-        "You are DJ Cara (aka DJCARA), a Trinidadian/Caribbean DJ speaking in a clear, relatable tone. "
-        "Write a coherent monologue that explains or reacts to the post in simple, concrete language. "
-        "Use light Trini/Caribbean flavor only where it feels natural (e.g., a few words like 'buh', 'dat', 'de', 'meh', 'yuh').\n"
-        "Avoid hype fillers, chanty phrasing, or call‑and‑response (no 'energy, energy', 'all hands up', 'pull up', 'we inside').\n"
-        "Avoid repeating lines and avoid excessive exclamation points. Keep it calm, friendly, and informative.\n"
-        "Target 45–90 seconds spoken.\n"
-        "Output 1–3 paragraphs of plain text ONLY. No labels, bullets, or markdown."
+        "You are DJ Cara (aka DJCARA), an off‑the‑cuff British radio host with a friendly, conversational vibe. "
+        "Speak in clear standard English with light modern UK slang when natural (mates, banger, dodgy, wally, proper, knees‑up, innit). "
+        "Keep it warm and witty, not shouty; avoid hype/chant or call‑and‑response.\n"
+        "Language policy: neutral English with subtle British flavor — never copy sample lines verbatim.\n"
+        "Style hints (optional, light touch): 'proper brilliant', 'banger', 'knees‑up', 'hold tight', 'don\'t be a wally'.\n"
+        "Delivery: short radio links, complete sentences, clean punctuation for clear TTS phrasing (limited exclamation marks).\n"
+        "Target 45–90 seconds spoken (1–3 short paragraphs). Plain text only — no labels, bullets, or markdown."
     )
+    if tone_hint:
+        style_preamble += "\n" + tone_hint
 
     prompt = f"""
 {style_preamble}
@@ -57,6 +69,12 @@ Constraints:
 - Avoid mentioning Reddit explicitly.
 - Use only light Caribbean flavor; focus on clarity and usefulness.
 """
+
+    if mode == "demo":
+        # Build a curated demo script from original lines
+        demo = build_demo_text(max_lines=24)
+        metadata["success"] = True
+        return demo, metadata
 
     if not OPENAI_AVAILABLE:
         metadata["used_fallback"] = True
@@ -74,7 +92,11 @@ Constraints:
         response = client.chat.completions.create(
             model="openai/gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are DJ Cara, a Trinidadian hype DJ. Keep it clean, high‑energy, authentic."},
+                {"role": "system", "content": (
+                    "You are DJ Cara (DJCARA), a British radio host. "
+                    "Sound natural and off‑the‑cuff, warm and clear. "
+                    "Use light UK slang sparingly; avoid hype‑DJ chanting."
+                )},
                 {"role": "user", "content": prompt},
             ],
         )
@@ -102,8 +124,8 @@ Constraints:
         metadata["error"] = str(e)
         metadata["used_fallback"] = True
         text = (
-            "Aye aye, allyuh ready or what? We inside wid de maddest vibes, level it up! "
-            f"{title or 'Sweet fete on de timeline'}, pull up, let we shell de place — energy to de ceiling!"
+            f"Right, here we go. {title or 'A quick one for you today'}. "
+            "Let\'s keep it simple and tidy — what it is, why it matters, and what you might do next. Nice and clear."
         )
         return text, metadata
 
@@ -112,6 +134,6 @@ dj_cara_spec = CharacterSpec(
     key="djcara",
     label="djcara",
     single_speaker=True,
-    default_voice=os.getenv("TTS_DJCARA_VOICE", "alloy"),
+    default_voice=os.getenv("TTS_DJCARA_VOICE", "Non_Stop_Pop.mp3"),
     generator=generate,
 )

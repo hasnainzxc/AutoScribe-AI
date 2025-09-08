@@ -36,6 +36,14 @@ ENV/
 # Project specific
 output/
 test_output/
+outputs/
+audio/
+audio2/
+audio3/
+intro/
+outro/
+intro_outros/
+audio_output/
 *.mp3
 *.mp4
 *.wav
@@ -43,6 +51,7 @@ test_output/
 *.mov
 logs/
 temp/
+/.history/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -96,3 +105,6 @@ Orpheus-FastAPI/docker-compose*.yaml
 # Optional: also ignore local outputs and venv
 Orpheus-FastAPI/outputs/
 Orpheus-FastAPI/venv/
+
+# Local internal docs (do not push)
+docs/INTERNAL_RUNBOOK.md

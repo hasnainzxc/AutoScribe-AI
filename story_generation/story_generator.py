@@ -14,6 +14,7 @@ def create_stories(
     sort: str = "top",
     time_filter: str = "day",
     character: str = "rickmorty",
+    mode: str = "reddit",
 ) -> List[Dict[str, Any]]:
     """Generate dialogues for a set of posts from a subreddit.
 
@@ -43,7 +44,11 @@ def create_stories(
     for post in posts:
         if spec and spec.single_speaker:
             # Single‑speaker monologue generation (e.g., DJ Cara)
-            text, meta = spec.generator(post)
+            # Pass mode to the generator if supported
+            try:
+                text, meta = spec.generator(post, mode=mode)
+            except TypeError:
+                text, meta = spec.generator(post)
             outputs.append({
                 "character": spec.key,
                 "text": text,

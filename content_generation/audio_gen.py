@@ -24,6 +24,38 @@ except Exception:
 from .tts_backends import get_tts_backend, TTSConfig
 
 
+def _persona_default_tts_params(label: Optional[str], cfg: TTSConfig) -> Dict[str, object]:
+    """Return conservative, clarity-focused defaults per persona.
+
+    Defaults aim to keep slang/style but slow pacing slightly to avoid
+    "eating words" while preserving energy.
+    """
+    lbl = (label or "").strip().lower()
+    if lbl == "djcara":
+        params: Dict[str, object] = {}
+        if cfg.djcara_temperature is not None:
+            params["temperature"] = cfg.djcara_temperature
+        if cfg.djcara_exaggeration is not None:
+            params["exaggeration"] = cfg.djcara_exaggeration
+        if cfg.djcara_speed_factor is not None:
+            params["speed_factor"] = cfg.djcara_speed_factor
+        if getattr(cfg, "djcara_cfg_weight", None) is not None:
+            params["cfg_weight"] = cfg.djcara_cfg_weight  # type: ignore[attr-defined]
+        if getattr(cfg, "djcara_seed", None) is not None:
+            params["seed"] = cfg.djcara_seed  # type: ignore[attr-defined]
+        if cfg.djcara_chunk_size is not None:
+            params["chunk_size"] = cfg.djcara_chunk_size
+        return params
+    return {}
+
+
+def _merge_params(base: Dict[str, object], override: Optional[Dict]) -> Dict[str, object]:
+    merged = {**base}
+    if override:
+        merged.update({k: v for k, v in override.items() if v is not None})
+    return merged
+
+
 def _is_valid_mp3(path: str) -> bool:
     try:
         if not os.path.exists(path) or os.path.getsize(path) < 1024:
@@ -41,6 +73,7 @@ def create_dialogue_audio(
     output_dir: str,
     voice_override: Optional[str] = None,
     force_gtts: bool = False,
+    tts_params: Optional[Dict] = None,
 ) -> List[str]:
     """Create audio files for each line of dialogue.
     
@@ -58,6 +91,7 @@ def create_dialogue_audio(
     
     # Select TTS backend once per batch
     backend = None if force_gtts else get_tts_backend()
+    cfg = TTSConfig()
 
     for i, line in enumerate(dialogue):
         if not isinstance(line, str):
@@ -93,7 +127,9 @@ def create_dialogue_audio(
         filename = f"{character}_line_{i}.mp3"
         filepath = os.path.join(output_dir, filename)
         # Choose voice depending on speaker (if server backend is active)
-        cfg = TTSConfig()
+        # Persona-aware default tuning
+        persona_defaults: Dict[str, object] = _persona_default_tts_params(speaker, cfg)
+        params = _merge_params(persona_defaults, tts_params)
         if voice_override:
             voice = voice_override
         elif character == "djcara":
@@ -103,14 +139,16 @@ def create_dialogue_audio(
         wrote = False
         try:
             if backend is not None:
-                backend.synthesize(clean_line, filepath, voice=voice)
+                # Pass merged params to backend (helps clarity for DJ Cara)
+                backend.synthesize(clean_line, filepath, voice=voice, params=params)
                 wrote = True
         except Exception as e:
             print(f"[TTS] Backend failed, falling back to gTTS: {e}")
         # Validate and/or fallback to gTTS
         if (not wrote) or (not _is_valid_mp3(filepath)):
             try:
-                tts = gTTS(text=clean_line, lang='en', slow=False)
+                # If falling back for DJ Cara, prefer slightly slower gTTS pacing
+                tts = gTTS(text=clean_line, lang='en', slow=(speaker == "djcara"))
                 tts.save(filepath)
                 wrote = True
             except Exception as e:
@@ -266,6 +304,9 @@ def render_combined_audio(
         out_label = _sanitize_filename(label or default_speaker or "dialogue")
         cfg = TTSConfig()
         voice = voice_override or (cfg.djcara_voice if out_label == "djcara" else cfg.default_voice)
+        # Merge persona-aware defaults (e.g., slower pacing for DJ Cara)
+        persona_defaults = _persona_default_tts_params(out_label, cfg)
+        eff_params = _merge_params(persona_defaults, tts_params)
 
         # Decide tmp extension based on server format; final is mp3 for consistency
         tmp_ext = (cfg.response_format or "wav").lower()
@@ -287,7 +328,7 @@ def render_combined_audio(
             print(f"[TTS] Synthesizing single track via {name} with voice '{voice}'...")
             # Pass optional tuning params through to the backend
             try:
-                backend.synthesize(script, tmp_raw, voice=voice, params=tts_params)  # type: ignore[call-arg]
+                backend.synthesize(script, tmp_raw, voice=voice, params=eff_params)  # type: ignore[call-arg]
             except TypeError:
                 # Backward-compat if backend doesn't accept params
                 backend.synthesize(script, tmp_raw, voice=voice)
@@ -324,7 +365,8 @@ def render_combined_audio(
                     "or unset TTS_REQUIRE_SERVER to allow gTTS fallback."
                 )
             try:
-                tts = gTTS(text=script, lang='en', slow=False)
+                # For DJ Cara fallback, use slower gTTS pacing for clarity
+                tts = gTTS(text=script, lang='en', slow=(out_label == "djcara"))
                 tts.save(out_mp3)
                 final_out = out_mp3
             except Exception as e:
@@ -355,10 +397,10 @@ def render_combined_audio(
     # Generate raw line audio into a tmp folder (multi-track combine path)
     tmp = audio_root / ".tmp"
     tmp.mkdir(parents=True, exist_ok=True)
-    line_files = create_dialogue_audio(dialogue, str(tmp), voice_override=voice_override)
+    line_files = create_dialogue_audio(dialogue, str(tmp), voice_override=voice_override, tts_params=tts_params)
     if not line_files:
         print("[TTS] No valid line audio produced; forcing gTTS for all lines...")
-        line_files = create_dialogue_audio(dialogue, str(tmp), voice_override=None, force_gtts=True)
+        line_files = create_dialogue_audio(dialogue, str(tmp), voice_override=None, force_gtts=True, tts_params=tts_params)
     if not line_files:
         raise RuntimeError("TTS failed to produce any valid audio lines")
 

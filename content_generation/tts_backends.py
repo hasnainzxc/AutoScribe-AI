@@ -27,7 +27,7 @@ class TTSConfig:
     model: str = "gpt-4o-mini-tts"
     # Default voices
     default_voice: str = "alloy"
-    djcara_voice: str = "DJ_Caralong.mp3"
+    djcara_voice: str = "Non_Stop_Pop.mp3"
     # Response audio format requested from the server (tmp extension used in pipeline)
     response_format: str = "mp3"  # usually one of: mp3, wav, opus
     # Optional synthesis parameters (with sensible defaults)
@@ -40,6 +40,13 @@ class TTSConfig:
     split_text: Optional[bool] = None
     sample_rate: Optional[int] = None
     language: Optional[str] = None
+    # Optional Cara-specific tuning (overrides general defaults when rendering DJ Cara)
+    djcara_speed_factor: Optional[float] = None
+    djcara_exaggeration: Optional[float] = None
+    djcara_temperature: Optional[float] = None
+    djcara_cfg_weight: Optional[float] = None
+    djcara_seed: Optional[int] = None
+    djcara_chunk_size: Optional[int] = None
 
     def __init__(self) -> None:
         # Ensure .env is loaded for non-exported vars
@@ -103,6 +110,36 @@ class TTSConfig:
         self.split_text = _b("TTS_SPLIT_TEXT", True)
         self.sample_rate = _i("TTS_SAMPLE_RATE", 24000)
         self.language = os.getenv("TTS_LANGUAGE") or None
+
+        # Cara-specific tuning with conservative defaults aimed at clearer pacing
+        # Allow either *_SPEED_FACTOR or *_SPEED names
+        def _dj_f(k_main: str, k_alt: Optional[str] = None, default: Optional[float] = None) -> Optional[float]:
+            v = os.getenv(k_main) or (os.getenv(k_alt) if k_alt else None)
+            try:
+                return float(v) if v is not None and v != "" else default
+            except Exception:
+                return default
+        def _dj_i(k_main: str, default: Optional[int] = None) -> Optional[int]:
+            v = os.getenv(k_main)
+            try:
+                return int(v) if v is not None and v != "" else default
+            except Exception:
+                return default
+
+        # DJ Cara persona defaults (client tuned)
+        # If env not set, fall back to these tuned values ("ours")
+        # temperature=0.7, exaggeration=0.8, cfg_weight=0.3, seed=42, speed=1.0
+        self.djcara_speed_factor = _dj_f("TTS_DJCARA_SPEED_FACTOR", "TTS_DJCARA_SPEED", 1.0)
+        self.djcara_exaggeration = _dj_f("TTS_DJCARA_EXAG", None, 0.8)
+        # Prefer explicit Cara temp, else general temp, else 0.7
+        self.djcara_temperature = _dj_f("TTS_DJCARA_TEMP", None, (self.temperature if self.temperature is not None else 0.7))
+        # Cara CFG and seed (with defaults)
+        try:
+            self.djcara_cfg_weight = float(os.getenv("TTS_DJCARA_CFG_WEIGHT") or "0.30")
+        except Exception:
+            self.djcara_cfg_weight = 0.30
+        self.djcara_seed = _dj_i("TTS_DJCARA_SEED", 42)
+        self.djcara_chunk_size = _dj_i("TTS_DJCARA_CHUNK_SIZE", None)
 
 
 class ChatterboxTTSBackend:
@@ -196,7 +233,7 @@ class ChatterboxTTSBackend:
         params: Optional[Dict[str, Any]] = None,
     ) -> str:
         # Determine a reasonable voice default if not provided
-        voice = voice or "DJ_Caralong.mp3"
+        voice = voice or (self._cfg.default_voice or "alloy")
         # Use voice stem as prefix to filter outputs
         voice_prefix = Path(voice).stem if voice else None
 
@@ -242,6 +279,22 @@ class ChatterboxTTSBackend:
                 body["seed"] = int(params["seed"])  # type: ignore[arg-type]
             if params.get("language"):
                 body["language"] = str(params["language"])  # type: ignore[arg-type]
+            # Optional overrides for low-level server behavior
+            if params.get("chunk_size") is not None:
+                try:
+                    body["chunk_size"] = int(params["chunk_size"])  # type: ignore[arg-type]
+                except Exception:
+                    pass
+            if params.get("split_text") is not None:
+                try:
+                    body["split_text"] = bool(params["split_text"])  # type: ignore[arg-type]
+                except Exception:
+                    pass
+            if params.get("sample_rate") is not None:
+                try:
+                    body["sample_rate"] = int(params["sample_rate"])  # type: ignore[arg-type]
+                except Exception:
+                    pass
         else:
             # Fall back to config/env defaults
             body["temperature"] = self._cfg.temperature

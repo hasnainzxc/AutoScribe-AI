@@ -152,6 +152,7 @@ def fetch_subreddit_posts(
                 "title": submission.title,
                 "selftext": submission.selftext or "",
                 "url": submission.url,
+                "subreddit": subreddit_name,
             }
             posts.append(post)
     except Exception as exc:
@@ -216,6 +217,7 @@ def _fallback_fetch_public_json(
                     "title": d.get("title", ""),
                     "selftext": d.get("selftext", ""),
                     "url": d.get("url_overridden_by_dest") or d.get("url", ""),
+                    "subreddit": subreddit_name,
                 }
             )
         return posts

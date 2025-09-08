@@ -67,17 +67,17 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 # Default (Rick & Morty)
 python run_story_gen.py beermoney -n 2 -s top -t week -o output
 
-# DJ Cara (single-track) using default Caralong voice
+# DJ Cara (single-track) using default Non_Stop_Pop voice
 # (Set CHATTERBOX_BASE_URL=http://localhost:8014 first.)
 python run_story_gen.py beermoney -c djcara -s top -t week -o audio
 
 # DJ Cara with an explicit voice (exact filename from /get_predefined_voices)
-python run_story_gen.py beermoney -c djcara -s top -t week -o audio --tts-voice "DJ_Caralong.mp3"
+python run_story_gen.py beermoney -c djcara -s top -t week -o audio --tts-voice "Non_Stop_Pop.mp3"
 
 # List available voices from Chatterbox
 python run_story_gen.py --list-voices
 
-# Shortcut: Explicitly use Dj Caralong voice
+# Shortcut: Explicitly use the Non_Stop_Pop voice
 python run_story_gen.py beermoney -c djcara -s top -t week -o audio --cara
 
 # Optional: pass TTS tuning parameters
@@ -105,7 +105,7 @@ CHATTERBOX_BASE_URL=http://localhost:8014
 CHATTERBOX_API_KEY=your_tts_server_key
 TTS_MODEL=gpt-4o-mini-tts
 TTS_DEFAULT_VOICE=alloy
-TTS_DJCARA_VOICE=DJ_Caralong.mp3
+TTS_DJCARA_VOICE=Non_Stop_Pop.mp3
 TTS_RESPONSE_FORMAT=mp3
 ```
 
@@ -116,9 +116,54 @@ Tips
 
 The pipeline automatically falls back to Google gTTS if a server isn’t configured or fails at runtime.
 
+#### Cara Pacing Defaults
+
+DJ Cara now uses clarity‑first pacing by default to avoid “eating words” while keeping the Trini flavor:
+
+- Default speed factor: 0.88 (slightly slower than 1.0)
+- Slightly reduced exaggeration for cleaner enunciation
+- Optional smaller chunk size if your server benefits from it
+
+You can override via environment variables:
+
+```
+# DJ Cara-specific overrides
+TTS_DJCARA_SPEED_FACTOR=0.88   # or TTS_DJCARA_SPEED
+TTS_DJCARA_EXAG=0.85
+# Optionally let the server work smaller chunks for better phrasing
+# TTS_DJCARA_CHUNK_SIZE=100
+```
+
+CLI flags like `--tts-speed` and `--tts-exag` still work and override these defaults for a run.
+
 ### Google TTS (default in examples)
 
 Works out of the box via `gTTS` in `content_generation/audio_gen.py`.
+
+---
+
+## Intro/Outro (Optional)
+
+Place your stingers in `./intro` and `./outro` as audio files (MP3 preferred; WAV also supported when `pydub` is installed). After synthesis, the CLI can prompt to auto‑prepend/append them to the generated track(s).
+
+Usage:
+
+```
+# Interactive prompt at the end (default)
+python run_story_gen.py beermoney -c djcara -o audio
+
+# Force adding intro/outro without a prompt
+python run_story_gen.py beermoney -c djcara -o audio --with-intro-outro
+
+# Force no intro/outro
+python run_story_gen.py beermoney -c djcara -o audio --without-intro-outro
+```
+
+Outputs are written alongside originals with the suffix `_with_intro_outro.mp3`.
+
+Notes:
+- With `pydub` available, most common formats are supported and exported to MP3.
+- Without `pydub`, all files must be MP3 and the tool will use ffmpeg concat.
 
 ---
 
